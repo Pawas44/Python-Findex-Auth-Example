@@ -53,6 +53,8 @@ class app_data_class:
         self.status:        str = ""
         self.numUsers:      str = ""
         self.downloadLink:  str = ""   # auto-update download URL
+        self.webloaderLink: str = ""   # webloader download URL
+        self.hash:          str = ""   # executable hash
         self.updateVersion: str = ""   # latest version on server
 
 class response_class:
@@ -159,8 +161,10 @@ class api:
         ai = data.get("data") or data.get("appinfo") or {}
         self.app_data.version       = ai.get("version",        self.version)
         self.app_data.status        = ai.get("status",         "enabled")
-        self.app_data.downloadLink  = ai.get("download_link",  "")
-        self.app_data.updateVersion = ai.get("latest_version", "")
+        self.app_data.downloadLink  = ai.get("downloadLink",   ai.get("download_link", ""))
+        self.app_data.webloaderLink = ai.get("webloaderLink",  "")
+        self.app_data.hash          = ai.get("hash",           "")
+        self.app_data.updateVersion = ai.get("version",        ai.get("latest_version", ""))
 
         # Auto-update check
         srv_ver = self.app_data.updateVersion or self.app_data.version
