@@ -64,6 +64,16 @@ class response_class:
         self.username_taken:     bool = False   # True = chosen username already exists
         self.validated_key:      str  = ""      # Key echoed back for registration step
 
+class protection_settings_class:
+    """Holds the Process Shield toggles from the dashboard."""
+    def __init__(self):
+        self.anti_debug:          bool = False
+        self.process_shield:      bool = False
+        self.anti_emulation:      bool = False
+        self.suspicious_windows:  bool = False
+        self.integrity_check:     bool = False
+        self.heuristic_integrity: bool = False
+        self.heartbeat_security:  bool = False
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  MAIN API CLASS
@@ -88,6 +98,7 @@ class api:
         self.user_data = user_data_class()
         self.app_data  = app_data_class()
         self.response  = response_class()
+        self.protection_settings = protection_settings_class()
 
         self._initialized = False
 
@@ -131,6 +142,28 @@ class api:
         self.user_data.license_key = d.get("license_key", "")
         self.user_data.createdate  = d.get("created_at",  "")
         self.user_data.lastlogin   = d.get("last_login",  "")
+        self._parse_protection(data)
+
+    def _parse_protection(self, data: dict):
+        ps = data.get("protection_settings", {})
+        self.protection_settings.anti_debug          = ps.get("anti_debug", False)
+        self.protection_settings.process_shield      = ps.get("process_shield", False)
+        self.protection_settings.anti_emulation      = ps.get("anti_emulation", False)
+        self.protection_settings.suspicious_windows  = ps.get("suspicious_windows", False)
+        self.protection_settings.integrity_check     = ps.get("integrity_check", False)
+        self.protection_settings.heuristic_integrity = ps.get("heuristic_integrity", False)
+        self.protection_settings.heartbeat_security  = ps.get("heartbeat_security", False)
+        self._parse_protection(data)
+
+    def _parse_protection(self, data: dict):
+        ps = data.get("protection_settings", {})
+        self.protection_settings.anti_debug          = ps.get("anti_debug", False)
+        self.protection_settings.process_shield      = ps.get("process_shield", False)
+        self.protection_settings.anti_emulation      = ps.get("anti_emulation", False)
+        self.protection_settings.suspicious_windows  = ps.get("suspicious_windows", False)
+        self.protection_settings.integrity_check     = ps.get("integrity_check", False)
+        self.protection_settings.heuristic_integrity = ps.get("heuristic_integrity", False)
+        self.protection_settings.heartbeat_security  = ps.get("heartbeat_security", False)
 
     def _set_response(self, data: dict):
         self.response.success            = data.get("success",            False)
@@ -172,6 +205,7 @@ class api:
 
         self.response.success = True
         self.response.message = "Initialized."
+        self._parse_protection(data)
         self._initialized = True
 
     # ── license(key) ─────────────────────────────────────────────────────────
