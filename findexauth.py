@@ -3,12 +3,12 @@ findexauth.py — FindexAuth Python SDK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Drop-in module. Same structure as FindexAuth.cs.
 
-INSTALL:  pip install requests
+INSTALL:  pip install requests rsa
 
 USAGE:
     from findexauth import api
 
-    auth = api("AppName", "OWNERID15CHARS", "SECRET64CHARS", "1.0", "https://yourserver.com")
+    auth = api("AppName", "OWNERID15CHARS", "SECRET64CHARS", "1.0", "https://yourserver.com", "RSA_PUB_KEY")
     auth.init()
     auth.license("YOUR-LICENSE-KEY")
 
@@ -24,11 +24,9 @@ USAGE:
 """
 
 import requests
-import hashlib
 import platform
 import time
 import os
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  DATA CLASSES (mirror FindexAuth.cs naming)
@@ -80,7 +78,7 @@ class api:
     responseTime: int = 0  # ms of last API call
 
     def __init__(self, name: str, ownerid: str, secret: str,
-                 version: str, apiUrl: str = "http://localhost:5001"):
+                 version: str, apiUrl: str = "http://localhost:5001", rsa_pub_key: str = ""):
         self.name:    str = name
         self.ownerid: str = ownerid
         self.secret:  str = secret
@@ -92,7 +90,7 @@ class api:
         self.response  = response_class()
 
         self._initialized = False
-        self._pub_key:    str = ""
+        self._pub_key:    str = rsa_pub_key
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -104,12 +102,40 @@ class api:
         except Exception:
             return platform.node()
 
+    def _verify_signature(self, raw_json: str, signature: str) -> bool:
+        if not self._pub_key:
+            return True # Not configured/enforced
+        try:
+            import rsa
+            import base64
+            sig_idx = raw_json.find(',"__sig"')
+            if sig_idx == -1: return False
+            payload = raw_json[:sig_idx] + "}"
+            
+            key_str = f"-----BEGIN PUBLIC KEY-----\n{self._pub_key}\n-----END PUBLIC KEY-----"
+            pub = rsa.PublicKey.load_pkcs1_openssl_pem(key_str.encode())
+            
+            rsa.verify(payload.encode('utf-8'), base64.b64decode(signature), 'SHA-256')
+            return True
+        except ImportError:
+            self.error("rsa module missing! pip install rsa")
+            return False
+        except Exception:
+            return False
+
     def _post(self, endpoint: str, payload: dict) -> dict:
         try:
             start = time.monotonic()
             r = requests.post(self.apiUrl + endpoint, json=payload, timeout=15)
             api.responseTime = int((time.monotonic() - start) * 1000)
-            return r.json()
+            data = r.json()
+            
+            # Security: Verify RSA Signature
+            if "__sig" in data:
+                if not self._verify_signature(r.text, data["__sig"]):
+                    return {"success": False, "message": "Security Error: Signature verification failed. Possible server spoofing detected."}
+
+            return data
         except Exception as e:
             return {"success": False, "message": str(e)}
 
@@ -145,11 +171,6 @@ class api:
         Connect to server, verify app credentials, check version.
         Must be called before license() or login().
         """
-        # Pin public key (optional, for future Ed25519 full verification)
-        pk = self._get("/api/1.3/public-key")
-        if pk.get("success"):
-            self._pub_key = pk.get("public_key", "")
-
         data = self._post("/api/1.3/app-info", {
             "app_name": self.name, "app_secret": self.secret
         })
@@ -181,14 +202,6 @@ class api:
     # ── license(key) ─────────────────────────────────────────────────────────
 
     def license(self, key: str):
-        """
-        Step 1: Validate license key.
-
-        After this call check:
-          auth.response.success           → False = invalid key, show error
-          auth.response.needs_registration → True  = fresh key, call register_key() next
-          auth.response.needs_registration → False = returning user, user_data populated
-        """
         if not self._initialized:
             self.response.success = False
             self.response.message = "Call init() first."
@@ -212,13 +225,6 @@ class api:
     # ── register_key(key, username, password) ─────────────────────────────────
 
     def register_key(self, key: str, username: str, password: str):
-        """
-        Step 2 (for fresh keys): Register with chosen username + password.
-
-        After this call check:
-          auth.response.success        → True  = account created, user_data populated
-          auth.response.username_taken → True  = pick a different username
-        """
         if not self._initialized:
             self.response.success = False
             self.response.message = "Call init() first."
@@ -241,7 +247,6 @@ class api:
     # ── login(username, password) ─────────────────────────────────────────────
 
     def login(self, username: str, password: str):
-        """Standard username + password login."""
         if not self._initialized:
             self.response.success = False
             self.response.message = "Call init() first."
@@ -263,7 +268,6 @@ class api:
     # ── checkblack() ─────────────────────────────────────────────────────────
 
     def checkblack(self) -> bool:
-        """Returns True if current HWID is blacklisted."""
         data = self._post("/api/1.3/check-blacklist", {
             "app_name": self.name, "app_secret": self.secret, "hwid": self._hwid()
         })
@@ -272,16 +276,39 @@ class api:
     # ── var(varid) ────────────────────────────────────────────────────────────
 
     def var(self, varid: str) -> str:
-        """Fetch a server-side variable by ID."""
         data = self._post("/api/1.3/var", {
-            "app_name": self.name, "app_secret": self.secret, "varid": varid
+            "app_name": self.name, "app_secret": self.secret, "var_name": varid
         })
-        return data.get("value", "") if data.get("success") else ""
+        return data.get("data", "") if data.get("success") else ""
+        
+    # ── webhook(webid, params) ────────────────────────────────────────────────
+        
+    def webhook(self, webid: str, params: str = ""):
+        data = self._post("/api/1.3/webhook", {
+            "app_name": self.name, "app_secret": self.secret, "webid": webid, "params": params
+        })
+        self._set_response(data)
+        
+    # ── download_file(fileid) ─────────────────────────────────────────────────
+        
+    def download_file(self, fileid: str) -> bytes:
+        data = self._post("/api/1.3/file", {
+            "app_name": self.name, "app_secret": self.secret, "fileid": fileid
+        })
+        self._set_response(data)
+        if not data.get("success"):
+            return None
+            
+        hex_data = data.get("contents", "")
+        if not hex_data: return None
+        try:
+            return bytes.fromhex(hex_data)
+        except Exception:
+            return None
 
     # ── log(msg) ──────────────────────────────────────────────────────────────
 
     def log(self, msg: str):
-        """Send a log message to the server."""
         self._post("/api/1.3/log", {
             "app_name": self.name, "app_secret": self.secret,
             "username": self.user_data.username, "message": msg
@@ -290,7 +317,6 @@ class api:
     # ── change_username(new_username, password) ────────────────────────────────
 
     def change_username(self, new_username: str, password: str):
-        """User changes their own username (requires current password)."""
         data = self._post("/api/1.3/change-username", {
             "app_name":    self.name,
             "app_secret":  self.secret,
@@ -305,7 +331,6 @@ class api:
     # ── change_password(old_pass, new_pass) ───────────────────────────────────
 
     def change_password(self, old_password: str, new_password: str):
-        """User changes their own password."""
         data = self._post("/api/1.3/change-password", {
             "app_name":    self.name,
             "app_secret":  self.secret,
@@ -318,11 +343,6 @@ class api:
     # ── heartbeat() ───────────────────────────────────────────────────────────
 
     def heartbeat(self) -> bool:
-        """
-        Single heartbeat check. Returns True if session is still valid.
-        Returns False if user was deleted, banned, or blacklisted.
-        Sets self.response.message with the reason.
-        """
         if not self.user_data.username:
             return True
         data = self._post("/api/1.3/heartbeat", {
@@ -331,30 +351,13 @@ class api:
             "username":   self.user_data.username,
             "hwid":       self._hwid()
         })
-        # Network errors → allow (don't punish bad connection)
         if not isinstance(data, dict):
             return True
         ok = data.get("success", True)
         self.response.message = data.get("message", "")
         return ok
 
-    def start_heartbeat(self, interval_seconds: int = 30,
-                        on_kick=None):
-        """
-        Start a background daemon thread that calls heartbeat() every
-        `interval_seconds` seconds.
-
-        If the server says the user is deleted or banned:
-          - Shows a tkinter messagebox (if tkinter is available)
-          - Calls on_kick(reason, message) if provided
-          - Calls sys.exit(1)
-
-        Call this right after a successful login/register.
-
-        Args:
-            interval_seconds: How often to ping (default 30).
-            on_kick:          Optional callback(reason, message) before exit.
-        """
+    def start_heartbeat(self, interval_seconds: int = 30, on_kick=None):
         import threading, sys
 
         def _loop():
@@ -373,24 +376,14 @@ class api:
                         reason  = data.get("reason",  "terminated")
                         message = data.get("message", "Session terminated by server.")
 
-                        # Call user-supplied callback first
                         if on_kick:
                             try: on_kick(reason, message)
                             except: pass
 
-                        # Try to show a GUI alert
-                        try:
-                            import tkinter as tk
-                            from tkinter import messagebox
-                            r = tk.Tk(); r.withdraw()
-                            messagebox.showwarning("Session Ended", message)
-                            r.destroy()
-                        except:
-                            print(f"\n[FindexAuth] {message}")
-
+                        print(f"\n[FindexAuth] {message}")
                         sys.exit(1)
                 except:
-                    pass  # network blip — skip this cycle
+                    pass
 
         t = threading.Thread(target=_loop, daemon=True, name="FindexAuth-Heartbeat")
         t.start()
@@ -399,9 +392,7 @@ class api:
 
     @staticmethod
     def error(message: str):
-        """Log error to file and print."""
         os.makedirs("Logs", exist_ok=True)
         with open("Logs/ErrorLogs.txt", "a") as f:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} > {message}\n")
         print(f"[FindexAuth ERROR] {message}")
-

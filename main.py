@@ -6,11 +6,15 @@ import sys
 from findexauth import api as FindexAuth
 
 # ── CREDENTIALS ───────────────────────────────────────────────────────────────
-APP_NAME   = "Findex Internal"#your application name (must match the one in the dashboard exactly)
+# App config - MATCH THESE WITH YOUR FINDEXAUTH DASHBOARD!
+APP_NAME   = "Findex Internal"
 OWNER_ID   = "8EPQ5RC4KK3AFC6" #Account owner id, found on the dashboard
 APP_SECRET = "5715b39369d3a6a763992813c037bf335a368f94f9d82287be12389f4d0ba4de"#APPLICATION SECRET
 APP_VER    = "1.0"
 SERVER_URL = "https://findexauth.online"
+
+# [SECURITY UPGRADE] Add your RSA Public Key here to prevent DNS spoofing (Found in your server console)
+RSA_PUB_KEY = ""
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ANSI Color Codes
@@ -210,7 +214,7 @@ def main():
     print_header()
     
     print(f"\n{Colors.CYAN}[INFO] Initializing FindexAuth Client...{Colors.RESET}")
-    auth = FindexAuth(APP_NAME, OWNER_ID, APP_SECRET, APP_VER, SERVER_URL)
+    auth = FindexAuth(APP_NAME, OWNER_ID, APP_SECRET, APP_VER, SERVER_URL, RSA_PUB_KEY)
     
     print(f"\n{Colors.GRAY}[HWID] Your Hardware ID: {auth._hwid()[:16]}...{Colors.RESET}")
     

@@ -1,74 +1,81 @@
-# FindexAuth - Python CLI Example
+# FindexAuth - Python SDK Example
 
-Welcome to the **FindexAuth Python SDK Example**. This project demonstrates how to integrate the FindexAuth authentication and licensing platform into any Python application using an elegant, colorful Command Line Interface (CLI) similar to CloudAuth.
+Welcome! This is the official **FindexAuth Python Example**. We made this to show you how easy it is to add FindexAuth to your Python projects. 
 
-FindexAuth provides military-grade security, hardware binding (HWID), and a robust session management system.
+This example uses a beautiful command-line interface (CLI) with colors. It includes military-grade security like **RSA-SHA256 Signature Verification**, so nobody can spoof your server.
 
-## Features
-- **Plug & Play:** Drop `findexauth.py` into your project and you're ready to go.
-- **Beautiful Console UI:** Clean ASCII art, colors, and interactive menus out-of-the-box.
-- **Hardware Binding:** Automatically grabs HWID using native Python techniques.
-- **Background Heartbeat:** The SDK spins up a daemon thread to ping the server every 30 seconds, automatically terminating the app if the user is banned or the subscription expires.
-- **Secure Transport:** Uses Python's `requests` library to securely communicate with the FindexAuth REST API.
+## 🌟 Features
+- **Plug & Play:** Just drop `findexauth.py` into your folder and import it.
+- **Uncrackable Security:** We use RSA-SHA256 to verify that every single response actually came from your server. Fake DNS routing or MITM attacks will immediately fail.
+- **Hidden Server Webhooks:** You can fire Discord webhooks directly from the server. Crackers will never see your Discord URL.
+- **Secure File Delivery:** Download files directly into memory as byte arrays. Never let your secret payloads touch the hard drive!
+- **Auto Hardware Binding:** Automatically grabs the user's HWID.
 
-## Project Structure
-```text
-├── python/
-│   ├── findexauth.py          <-- The core Python SDK. Do not modify.
-│   ├── main.py                <-- The interactive CLI application.
-│   ├── requirements.txt       <-- Python dependencies.
-│   └── README.md
-```
-
-## Getting Started
+## 🚀 How to Setup
 
 ### 1. Install Requirements
-FindexAuth relies on the standard `requests` library for HTTP communication.
+We use the standard `requests` library for web calls and `rsa` for verifying server signatures. Open your terminal and run:
 
 ```bash
-pip install -r requirements.txt
-# or simply:
-pip install requests
+pip install requests rsa
 ```
 
-### 2. Configure Your App Credentials
-Open `main.py` in your favorite editor and edit the `CREDENTIALS` section at the top of the file:
+### 2. Enter Your Details
+Open `main.py` in your code editor and look for the config section at the top. Fill in your details from the FindexAuth Dashboard:
 
 ```python
-APP_NAME   = "Appliction Name"
+APP_NAME   = "Your App Name"
 OWNER_ID   = "Your-Owner-ID" 
 APP_SECRET = "Your-App-Secret"
 APP_VER    = "1.0.0"
 SERVER_URL = "https://findexauth.online"
+
+# Find this in your Server Console (prevents DNS spoofing attacks!)
+RSA_PUB_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQ..." 
 ```
 
-### 3. Run the Example
-Run the script using Python:
+### 3. Run It!
+Run the app to see it working:
 
 ```bash
 python main.py
 ```
 
-### 4. Integration Guide
-To add this to your own project, simply copy `findexauth.py` and implement the basic flow:
+## 💻 Code Examples
 
+Here are some examples of what FindexAuth can do for you:
+
+### Setup & Login
 ```python
 from findexauth import api as FindexAuth
 
-auth = FindexAuth("MyApp", "OwnerID", "AppSecret", "1.0", "https://findexauth.online")
+auth = FindexAuth("MyApp", "OwnerID", "AppSecret", "1.0", "https://findexauth.online", "RSA_PUB_KEY")
 auth.init()
 
 if auth.response.success:
     auth.login("username", "password")
-    
     if auth.response.success:
         print("Welcome", auth.user_data.username)
-        auth.start_heartbeat(30)
+        auth.start_heartbeat(30) # Protects session in background
 ```
 
-## Troubleshooting
-- **Failed to connect:** Ensure `SERVER_URL` points directly to your API (e.g. `https://findexauth.online`) without trailing slashes.
-- **Colors not showing in Windows:** The script automatically attempts to enable ANSI escape codes by calling `os.system('color')`, which is standard for modern Windows command prompts.
+### Server-Sided Webhooks
+Keep your webhook URLs hidden on the server!
+```python
+# '123' is your Webhook ID from the dashboard
+auth.webhook("123", "User logged in successfully!")
+```
+
+### Secure File Download
+Download payloads safely without writing to disk.
+```python
+# '5' is your File ID from the dashboard
+file_bytes = auth.download_file("5")
+
+if file_bytes:
+    # You can now inject these bytes straight into memory!
+    print("Downloaded file safely!")
+```
 
 ---
-*Built with ❤️ for FindexAuth.*
+*Built with ❤️ by FindexAuth.*
