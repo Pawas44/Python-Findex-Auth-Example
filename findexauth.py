@@ -3,12 +3,12 @@ findexauth.py — FindexAuth Python SDK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Drop-in module. Same structure as FindexAuth.cs.
 
-INSTALL:  pip install requests rsa
+INSTALL:  pip install requests
 
 USAGE:
     from findexauth import api
 
-    auth = api("AppName", "OWNERID15CHARS", "SECRET64CHARS", "1.0", "https://yourserver.com", "RSA_PUB_KEY")
+    auth = api("AppName", "OWNERID15CHARS", "SECRET64CHARS", "1.0", "https://yourserver.com")
     auth.init()
     auth.license("YOUR-LICENSE-KEY")
 
@@ -78,7 +78,7 @@ class api:
     responseTime: int = 0  # ms of last API call
 
     def __init__(self, name: str, ownerid: str, secret: str,
-                 version: str, apiUrl: str = "http://localhost:5001", rsa_pub_key: str = ""):
+                 version: str, apiUrl: str = "http://localhost:5001"):
         self.name:    str = name
         self.ownerid: str = ownerid
         self.secret:  str = secret
@@ -90,7 +90,6 @@ class api:
         self.response  = response_class()
 
         self._initialized = False
-        self._pub_key:    str = rsa_pub_key
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -102,26 +101,7 @@ class api:
         except Exception:
             return platform.node()
 
-    def _verify_signature(self, raw_json: str, signature: str) -> bool:
-        if not self._pub_key:
-            return True # Not configured/enforced
-        try:
-            import rsa
-            import base64
-            sig_idx = raw_json.find(',"__sig"')
-            if sig_idx == -1: return False
-            payload = raw_json[:sig_idx] + "}"
-            
-            key_str = f"-----BEGIN PUBLIC KEY-----\n{self._pub_key}\n-----END PUBLIC KEY-----"
-            pub = rsa.PublicKey.load_pkcs1_openssl_pem(key_str.encode())
-            
-            rsa.verify(payload.encode('utf-8'), base64.b64decode(signature), 'SHA-256')
-            return True
-        except ImportError:
-            self.error("rsa module missing! pip install rsa")
-            return False
-        except Exception:
-            return False
+
 
     def _post(self, endpoint: str, payload: dict) -> dict:
         try:
@@ -130,11 +110,6 @@ class api:
             api.responseTime = int((time.monotonic() - start) * 1000)
             data = r.json()
             
-            # Security: Verify RSA Signature
-            if "__sig" in data:
-                if not self._verify_signature(r.text, data["__sig"]):
-                    return {"success": False, "message": "Security Error: Signature verification failed. Possible server spoofing detected."}
-
             return data
         except Exception as e:
             return {"success": False, "message": str(e)}
