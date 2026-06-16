@@ -1,7 +1,8 @@
 import time
 import os
 import sys
-
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 # Import the FindexAuth SDK
 from findexauth import api as FindexAuth
 
